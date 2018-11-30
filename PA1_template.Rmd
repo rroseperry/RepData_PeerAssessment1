@@ -1,25 +1,194 @@
 ---
-title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
+title: "ReproducibleResearch"
+author: "RPerry"
+date: "November 28, 2018"
+output: html_document
 ---
 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,fig.width=12, fig.height=8, fig.path='Figs/')
 
-## Loading and preprocessing the data
+```
+### Reading and processing dataset
+```{r read data}
+library(lubridate)
+Activity <-read.csv("C:/Users/rperry/Documents/Data Science Course/Data Sets/ReproducibleResearch/activity.csv")
+#       convert date from factors to dates
+Activity$date <- parse_date_time(Activity$date, "%Y-%m-%d")
+```
+### What is the distribution of the total number of steps taken per day?
+
+This question is not particularly clear, so let's take two bites, first the frequency histogram.
+```{r histogram}
+#       total steps per day
+TotalSteps <- with(Activity, aggregate(Activity[,1],
+                             by = list(date = date), sum))
+#     plot total
+hist(TotalSteps$x, main = "Histogram of total steps per day", col = "seagreen", xlab = "")
+```
+
+Second, the barplot of total number of steps by day, which tells a different part of the story
+```{r total steps barplot}
+TotalStepsDay <- aggregate(steps ~ date, rm.na = TRUE, data = Activity, FUN = sum)
+plot(TotalStepsDay, type = "h",  lwd = 11, lend = "square", main = "Histogram of total steps per day", col = "seagreen")
+```
 
 
+### Calculating Mean and Median steps per day
 
-## What is mean total number of steps taken per day?
+#### Plain tables
+```{r total means by day}
+# mean and median
+library(knitr)
+A <- with(Activity, aggregate(Activity[,1],
+                              by = list(date = date), mean))
+B <- with(Activity, aggregate(Activity[,1],
+                              by = list(date = date), median))
+colnames(A) <- c("date", "mean")
+colnames(B) <- c("date", "median")
+kable(A)
+kable(B)
+```
 
 
+### Time Series, average steps per day by interval
 
-## What is the average daily activity pattern?
+```{r time series}
+#        the time series plot
+plot(aggregate(steps ~ interval, data = Activity, FUN = mean), type = "l")
+```
+
+### Interval with maximum steps
+```{r maximum steps interval}
+#       Maximum steps for interval
+##      id that interval 
+C <- aggregate(steps ~ interval, data = Activity, FUN = mean)
+intervalID <- C[which.max(C$steps),1]
+ 
+ 
+```
+The interval with the maximum steps is `r intervalID`.
+
+### Replacing Missing Values
+
+```{r replace NA}
+#       working on/with NA values
+#       first count the number of NAs
+missingsteps <- sum((is.na(Activity$steps)))
+#       missingdays <- sum(is.na(Activity$date))
+#       missingint <- sum(is.na(Activity$interval)) 
+
+#        copy the file
+NewAct <- Activity
+#        reuse the mean calculation
+C <- aggregate(steps ~ interval, data = Activity, FUN = mean)
 
 
+#       replacing  NAs
+#       use the interval mean for the replacement value
+for (i in 1:17568){
+        # sub in mean interval for NA
+        if (is.na(NewAct[i,1]) == TRUE){
+                # find the right C
+                intID <-NewAct[i,3]
+        SubC <- subset(C, interval == intID)
+        NewAct[i,1] <- SubC$steps
+        }
+}
+       
+#        check for missing values
+missingsteps1 <- sum(is.na(NewAct$steps))
+missingsteps1
+```
 
-## Imputing missing values
+###  Plotting the Histogram and Recalculating the Mean and Mean with NAs Replacement
+###     Histogram(s) first
+
+```{r new histogram}
+#       total steps per day
+TotalStepsNew <- with(NewAct, aggregate(NewAct[,1],
+                             by = list(date = date), sum))
+#     plot total
+hist(TotalStepsNew$x, main = "Histogram of total steps per day", col = "slateblue", xlab = "")
+```
+
+Here they are by day.
+```{r new barplot}
+TotalStepsNewDay <- aggregate(steps ~ date, rm.na = TRUE, data = NewAct, FUN = sum)
+plot(TotalStepsNewDay, type = "h",  lwd = 11, lend = "square", main = "Histogram of total steps per day", col = "slateblue")
+```
+
+The histograms don't provide much detail. There is an increase in the frequency of the modal values in the first recalculated graph. In the second all the holes are filled in.
+
+### Recalculating Mean and Median steps per day
+
+#### Plain tables
+```{r new means and median}
+# mean and median
+library(knitr)
+A1 <- with(NewAct, aggregate(NewAct[,1],
+                              by = list(date = date), mean))
+B1 <- with(NewAct, aggregate(NewAct[,1],
+                              by = list(date = date), median))
+colnames(A1) <- c("date", "mean")
+colnames(B1) <- c("date", "median")
+kable(A1)
+kable(B1)
+```
+
+### Comparing the overall means and medians
+
+It's hard to do the pairwise comparision on these table by eyeball. A better comparison might be between the means and median values for the overall data set and the one with the NAs replaced. 
+```{r overall means and median}
+#       mean and median original
+Omean <- mean(Activity$steps, na.rm = TRUE)
+Omedian <- median(Activity$steps, na.rm = TRUE)
+
+#       mean and median new
+Nmean <- mean(NewAct$steps)
+Nmedian <- median(NewAct$steps)
+```
+
+The original mean was `r Omean` compared with the new mean `r Nmean`. The medians likewise, old = `r Omedian`, new `r Nmedian`. Using the mean steps per interval to replace the NA values, did not change the summary stats.
+
+### Weekdays and Weekends
 
 
+Using the data set with the NAs replaced, the final set of plots looks at whether the days of the week, weekend versus weekday, makes a difference in the mean number of steps taken at different times of the day.
+```{r weekends and weekdays}
+#       using the new data set get the weekend and weekdays separated using a new variable
+#       Create a new factor variable in the dataset with two levels - "weekday" and "weekend" 
+#       indicating whether a given date is a weekday or weekend day.
+wkDay <- c("Monday", "Tuesday","Wednesday","Thursday","Friday")
+NewAct$days <- NA
+#       how this should work, check the date, if it's a weekday, then call the new variable weekday, otherwise weekend.
+for (i in 1:17568){
+        if (weekdays(NewAct[i,2]) %in% wkDay){
+                NewAct[i,4] <-c("weekday")
+        } else
+        {
+        NewAct[i,4] <-c("weekend")
+        }
+}             
 
-## Are there differences in activity patterns between weekdays and weekends?
+#       plotting weekday and weekend time series
+#        subset first
+workdays <-subset(NewAct, days == "weekday")
+workdays <- aggregate(steps ~ interval, data = workdays, FUN = mean)
+playdays <- subset(NewAct, days == "weekend")
+playdays <- aggregate(steps ~ interval, data = playdays, FUN = mean)
+
+
+#puting the means together for better plotting
+workdays$day <- c("weekday")
+playdays$day <- c("weekend")
+daydiff <-rbind(workdays, playdays)
+
+# now to panel them and give them the right titles
+library(lattice)
+xyplot(steps ~ interval | day, daydiff,
+       grid = TRUE, type = "l", layout = c(1,2), xlab = "intervals", ylab = "number of steps")
+```
+
+As you can see, there's a morning spike in steps, presumably people going to work on weekdays, which is not visible in the weekend plot.
+
